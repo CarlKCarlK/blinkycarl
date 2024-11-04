@@ -36,41 +36,64 @@ async fn main(_spawner0: Spawner) {
 }
 
 async fn fast_state(button: &mut Input<'_>, led0: &mut Output<'_>) -> State {
+    // loop until button is pressed down
     loop {
         led0.toggle();
-        if let Either::Second(()) = select(
+        if let Either::First(()) = select(
+            button.wait_for_rising_edge(), // wait for button press down
             Timer::after(Duration::from_millis(100)),
-            button.wait_for_falling_edge(),
         )
         .await
         {
-            return State::Slow;
+            break;
         }
+    }
+
+    // if button is released within 1 second, go to slow state else go to start state
+    if_fast_release_else(button, State::Slow, State::First).await
+}
+
+async fn if_fast_release_else(
+    button: &mut Input<'_>,
+    tap_state: State,
+    hold_state: State,
+) -> State {
+    if let Either::First(()) = select(
+        button.wait_for_falling_edge(), // wait for button release
+        Timer::after(Duration::from_secs(1)),
+    )
+    .await
+    {
+        tap_state
+    } else {
+        button.wait_for_falling_edge().await; // wait for button release
+        hold_state
     }
 }
 
 async fn slow_state(button: &mut Input<'_>, led0: &mut Output<'_>) -> State {
     loop {
         led0.toggle();
-        if let Either::Second(()) = select(
+        if let Either::First(()) = select(
+            button.wait_for_rising_edge(),
             Timer::after(Duration::from_millis(500)),
-            button.wait_for_falling_edge(),
         )
         .await
         {
-            return State::AlwaysOn;
+            break;
         }
     }
+    if_fast_release_else(button, State::AlwaysOn, State::First).await
 }
 
 async fn always_on_state(button: &mut Input<'_>, led0: &mut Output<'_>) -> State {
     led0.set_high();
-    button.wait_for_falling_edge().await;
-    State::AlwaysOff
+    button.wait_for_rising_edge().await;
+    if_fast_release_else(button, State::AlwaysOff, State::First).await
 }
 
 async fn always_off_state(button: &mut Input<'_>, led0: &mut Output<'_>) -> State {
     led0.set_low();
-    button.wait_for_falling_edge().await;
-    State::Last
+    button.wait_for_rising_edge().await;
+    if_fast_release_else(button, State::Last, State::First).await
 }

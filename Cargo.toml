@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "blinkycarl"
+name = "blinkycarl" # if you change this, update .cargo/config.toml 'runner', too
 version = "0.1.0"
 
 [dependencies]

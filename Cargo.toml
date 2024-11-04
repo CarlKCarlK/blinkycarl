@@ -34,11 +34,3 @@ embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "d5bad
     "defmt",
     "defmt-timestamp-uptime",
 ] }
-thiserror = { version = "1.0.50", package = "thiserror-core", default-features = false }
-static_cell = "2"
-portable-atomic = { version = "1.5", features = ["critical-section"] }
-heapless = "0.8"
-
-[[bin]]
-name = "blinkycarl"
-test = false

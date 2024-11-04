@@ -1,46 +1,88 @@
 #![no_std]
 #![no_main]
 
-use core::array;
-
-use defmt::unwrap;
-use embassy_executor::{Executor, Spawner};
+use embassy_executor::Spawner;
 use embassy_futures::select::{select, Either};
-use embassy_rp::{
-    gpio,
-    multicore::{spawn_core1, Stack},
-    peripherals::CORE1,
-};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Instant, Timer};
-use embedded_hal::digital::OutputPin;
+use embassy_rp::gpio;
+use embassy_time::{Duration, Timer};
 use gpio::Level;
 use static_cell::StaticCell;
+use {defmt_rtt as _, panic_probe as _};
 
-static mut CORE1_STACK: Stack<4096> = Stack::new();
-static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
-use {defmt_rtt as _, panic_probe as _}; // Adjust the import path according to your setup
+enum State {
+    First,
+    Fast,
+    Slow,
+    AlwaysOn,
+    AlwaysOff,
+    Last,
+}
 
 #[embassy_executor::main]
 async fn main(_spawner0: Spawner) {
     let pins = Pins::new();
-
     let button = pins.button;
     let led0 = pins.led0;
 
+    let mut state = State::First;
     loop {
-        led0.set_high();
-        Timer::after(Duration::from_millis(500)).await;
-        led0.set_low();
-        Timer::after(Duration::from_millis(500)).await;
+        state = match state {
+            State::First => State::Fast,
+            State::Fast => fast_state(button, led0).await,
+            State::Slow => slow_state(button, led0).await,
+            State::AlwaysOn => always_on_state(button, led0).await,
+            State::AlwaysOff => always_off_state(button, led0).await,
+            State::Last => State::First,
+        };
     }
 }
 
+type Button = gpio::Input<'static>;
+type Led = gpio::Output<'static>;
+
+async fn fast_state(button: &mut Button, led0: &mut Led) -> State {
+    loop {
+        led0.toggle();
+        if let Either::Second(()) = select(
+            Timer::after(Duration::from_millis(100)),
+            button.wait_for_falling_edge(),
+        )
+        .await
+        {
+            return State::Slow;
+        }
+    }
+}
+
+async fn slow_state(button: &mut Button, led0: &mut Led) -> State {
+    loop {
+        led0.toggle();
+        if let Either::Second(()) = select(
+            Timer::after(Duration::from_millis(500)),
+            button.wait_for_falling_edge(),
+        )
+        .await
+        {
+            return State::AlwaysOn;
+        }
+    }
+}
+
+async fn always_on_state(button: &mut Button, led0: &mut Led) -> State {
+    led0.set_high();
+    button.wait_for_falling_edge().await;
+    State::AlwaysOff
+}
+
+async fn always_off_state(button: &mut Button, led0: &mut Led) -> State {
+    led0.set_low();
+    button.wait_for_falling_edge().await;
+    State::Last
+}
+
 struct Pins {
-    button: &'static mut gpio::Input<'static>,
-    led0: &'static mut gpio::Output<'static>,
+    button: &'static mut Button,
+    led0: &'static mut Led,
 }
 
 impl Pins {

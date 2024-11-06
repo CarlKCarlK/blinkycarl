@@ -20,7 +20,7 @@ enum State {
 async fn main(_spawner0: Spawner) {
     let p: embassy_rp::Peripherals = embassy_rp::init(Default::default());
     let mut button = Input::new(p.PIN_13, Pull::Down);
-    let mut led0 = Output::new(p.PIN_0, Level::Low);
+    let mut led0 = Output::new(p.PIN_2, Level::Low);
 
     let mut state = State::First;
     loop {
